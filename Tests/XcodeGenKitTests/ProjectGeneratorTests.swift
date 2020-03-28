@@ -822,11 +822,19 @@ class ProjectGeneratorTests: XCTestCase {
                     sources: [TargetSource(path: "StaticLibrary_Swift/StaticLibrary.swift")],
                     dependencies: []
                 )
-                let swiftStaticLibraryWithoutHeader = Target(
-                    name: "swiftStaticLibraryWithoutHeader",
+                let swiftStaticLibraryWithoutHeader1 = Target(
+                    name: "swiftStaticLibraryWithoutHeader1",
                     type: .staticLibrary,
                     platform: .iOS,
                     settings: Settings(buildSettings: ["SWIFT_OBJC_INTERFACE_HEADER_NAME": ""]),
+                    sources: [TargetSource(path: "StaticLibrary_Swift/StaticLibrary.swift")],
+                    dependencies: []
+                )
+                let swiftStaticLibraryWithoutHeader2 = Target(
+                    name: "swiftStaticLibraryWithoutHeader2",
+                    type: .staticLibrary,
+                    platform: .iOS,
+                    settings: Settings(buildSettings: ["SWIFT_INSTALL_OBJC_HEADER": false]),
                     sources: [TargetSource(path: "StaticLibrary_Swift/StaticLibrary.swift")],
                     dependencies: []
                 )
@@ -838,7 +846,7 @@ class ProjectGeneratorTests: XCTestCase {
                     dependencies: []
                 )
 
-                let targets = [swiftStaticLibraryWithHeader, swiftStaticLibraryWithoutHeader, objCStaticLibrary]
+                let targets = [swiftStaticLibraryWithHeader, swiftStaticLibraryWithoutHeader1, swiftStaticLibraryWithoutHeader2, objCStaticLibrary]
 
                 let project = Project(
                     basePath: fixturePath + "TestProject",
@@ -866,7 +874,8 @@ class ProjectGeneratorTests: XCTestCase {
                 )
 
                 try expect(scriptBuildPhases(target: swiftStaticLibraryWithHeader)) == [expectedScriptPhase]
-                try expect(scriptBuildPhases(target: swiftStaticLibraryWithoutHeader)) == []
+                try expect(scriptBuildPhases(target: swiftStaticLibraryWithoutHeader1)) == []
+                try expect(scriptBuildPhases(target: swiftStaticLibraryWithoutHeader2)) == []
                 try expect(scriptBuildPhases(target: objCStaticLibrary)) == []
             }
 
@@ -989,9 +998,10 @@ class ProjectGeneratorTests: XCTestCase {
                 )
 
                 let project = Project(name: "test", targets: [app], packages: [
-                    "XcodeGen": SwiftPackage(url: "http://github.com/yonaskolb/XcodeGen", versionRequirement: .branch("master")),
-                    "Codability": SwiftPackage(url: "http://github.com/yonaskolb/Codability", versionRequirement: .exact("1.0.0")),
-                ], localPackages: ["../XcodeGen"], options: .init(localPackagesGroup: "MyPackages"))
+                    "XcodeGen": .remote(url: "http://github.com/yonaskolb/XcodeGen", versionRequirement: .branch("master")),
+                    "Codability": .remote(url: "http://github.com/yonaskolb/Codability", versionRequirement: .exact("1.0.0")),
+                    "Yams": .local(path: "../Yams")
+                ], options: .init(localPackagesGroup: "MyPackages"))
 
                 let pbxProject = try project.generatePbxProj(specValidate: false)
                 let nativeTarget = try unwrap(pbxProject.nativeTargets.first(where: { $0.name == app.name }))
@@ -1006,12 +1016,42 @@ class ProjectGeneratorTests: XCTestCase {
                 try expect(codabilityDependency.package?.name) == "Codability"
                 try expect(codabilityDependency.package?.versionRequirement) == .exact("1.0.0")
 
+
                 let localPackagesGroup = try unwrap(try pbxProject.getMainGroup().children.first(where: { $0.name == "MyPackages" }) as? PBXGroup)
 
-                let localPackageFile = try unwrap(pbxProject.fileReferences.first(where: { $0.path == "../XcodeGen" }))
+                let yamsLocalPackageFile = try unwrap(pbxProject.fileReferences.first(where: { $0.path == "../Yams" }))
+                try expect(localPackagesGroup.children.contains(yamsLocalPackageFile)) == true
+                try expect(yamsLocalPackageFile.lastKnownFileType) == "folder"
+            }
+            
+            $0.it("generates local swift packages") {
+                let app = Target(
+                    name: "MyApp",
+                    type: .application,
+                    platform: .iOS,
+                    dependencies: [
+                        Dependency(type: .package(product: nil), reference: "XcodeGen"),
+                    ]
+                )
 
-                try expect(localPackagesGroup.children.contains(localPackageFile)) == true
+                let project = Project(name: "test", targets: [app], packages: ["XcodeGen" : .local(path: "../XcodeGen")])
+
+                let pbxProject = try project.generatePbxProj(specValidate: false)
+                let nativeTarget = try unwrap(pbxProject.nativeTargets.first(where: { $0.name == app.name }))
+                let localPackageFile = try unwrap(pbxProject.fileReferences.first(where: { $0.path == "../XcodeGen" }))
                 try expect(localPackageFile.lastKnownFileType) == "folder"
+                
+                let frameworkPhases = nativeTarget.buildPhases.compactMap { $0 as? PBXFrameworksBuildPhase }
+                
+                guard let frameworkPhase = frameworkPhases.first else {
+                    return XCTFail("frameworkPhases should have more than one")
+                }
+                
+                guard let file = frameworkPhase.files?.first else {
+                    return XCTFail("frameworkPhase should have file")
+                }
+
+                try expect(file.product?.productName) == "XcodeGen"
             }
 
             $0.it("generates info.plist") {

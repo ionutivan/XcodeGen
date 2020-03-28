@@ -48,8 +48,7 @@ You can also use environment variables in your configuration file, by using `${S
 - [ ] **fileGroups**: **[String]** - A list of paths to add to the root of the project. These aren't files that will be included in your targets, but that you'd like to include in the project hierachy anyway. For example a folder of xcconfig files that aren't already added by any target sources, or a Readme file.
 - [ ] **schemes**: **[Scheme](#scheme)** - A list of schemes by name. This allows more control over what is found in [Target Scheme](#target-scheme)
 - [ ] **targetTemplates**: **[String: [Target Template](#target-template)]** - a list of targets that can be used as templates for actual targets which reference them via a `template` property. They can be used to extract common target settings. Works great in combination with `include`.
-- [ ] **packages**: **[String: [Swift Package](#swift-package)]** - a map of Swift packages by name
-- [ ] **localPackages**: **[String]** - A list of paths to local Swift Packages. The paths must be directories with a `Package.swift` file in them. This is used to override `packages` with a local version for development purposes. For now local packages that don't mirror remote packages aren't able to be linked to
+- [ ] **packages**: **[String: [Swift Package](#swift-package)]** - a map of Swift packages by name.
 - [ ] **projectReferences**: **[String: [Project Reference](#project-reference)]** - a map of project references by name
 
 ### Include
@@ -597,6 +596,8 @@ This is a convenience used to automatically generate schemes for a target based 
 - [ ] **testTargets**: **[[Test Target](#test-target)]** - a list of test targets that should be included in the scheme. These will be added to the build targets and the test entries. Each entry can either be a simple string, or a [Test Target](#test-target)
 - [ ] **gatherCoverageData**: **Bool** - a boolean that indicates if this scheme should gather coverage data. This defaults to false
 - [ ] **disableMainThreadChecker**: **Bool** - a boolean that indicates if this scheme should disable disable the Main Thread Checker. This defaults to false
+- [ ] **stopOnEveryMainThreadCheckerIssue**: **Bool** - a boolean that indicates if this scheme should stop at every Main Thread Checker issue. This defaults to false
+- [ ] **buildImplicitDependencies**: **Bool** - Flag to determine if Xcode should build implicit dependencies of this scheme. By default this is `true` if not set.
 - [ ] **language**: **String** - a String that indicates the language used for running and testing. This defaults to nil
 - [ ] **region**: **String** - a String that indicates the region used for running and testing. This defaults to nil
 - [ ] **commandLineArguments**: **[String:Bool]** - a dictionary from the argument name (`String`) to if it is enabled (`Bool`). These arguments will be added to the Test, Profile and Run scheme actions
@@ -732,6 +733,7 @@ The different actions share some properties:
 - [ ] **postActions**: **[[Execution Action](#execution-action)]** - Scripts that are run *after* the action
 - [ ] **environmentVariables**: **[[Environment Variable](#environment-variable)]** or **[String:String]** - `run`, `test` and `profile` actions can define the environment variables. When passing a dictionary, every key-value entry maps to a corresponding variable that is enabled.
 - [ ] **disableMainThreadChecker**: **Bool** - `run` and `test` actions can define a boolean that indicates that this scheme should disable the Main Thread Checker. This defaults to false
+- [ ] **stopOnEveryMainThreadCheckerIssue**: **Bool** - a boolean that indicates if this scheme should stop at every Main Thread Checker issue. This defaults to false
 - [ ] **language**: **String** - `run` and `test` actions can define a language that is used for Application Language
 - [ ] **region**: **String** - `run` and `test` actions can define a language that is used for Application Region
 - [ ] **debugEnabled**: **Bool** - `run` and `test` actions can define a whether debugger should be used. This defaults to true.
@@ -874,6 +876,8 @@ Swift packages are defined at a project level, and then linked to individual tar
 
 > Note that Swift Packages don't work in projects with configurations other than `Debug` and `Release`. That limitation is tracked here bugs.swift.org/browse/SR-10927
 
+### Remote Package
+
 - [x] **url**: **URL** - the url to the package
 - [x] **version**: **String** - the version of the package to use. It can take a few forms:
   - `majorVersion: 1.2.0` or `from: 1.2.0`
@@ -882,18 +886,24 @@ Swift packages are defined at a project level, and then linked to individual tar
   - `minVersion: 1.0.0, maxVersion: 1.2.9`
   - `branch: master`
   - `revision: xxxxxx`
+  
+### Local Package
+
+- [x] **path**: **String** - the path to the package in local. The path must be directory with a `Package.swift`.
 
 ```yml
 packages:
   Yams:
     url: https://github.com/jpsim/Yams
     from: 2.0.0
+  RxClient:
+    path: ../RxClient
 targets:
   App:
     dependencies:
       - package: Yams
+      - package: RxClient
 ```
-
 
 ## Project Reference
 

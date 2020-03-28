@@ -55,13 +55,7 @@ public class PBXProjGenerator {
         for group in project.fileGroups {
             try sourceGenerator.getFileGroups(path: group)
         }
-
-        let localPackages = Set(project.localPackages)
-        for package in localPackages {
-            let path = project.basePath + Path(package).normalize()
-            try sourceGenerator.createLocalPackage(path: path)
-        }
-
+        
         let buildConfigs: [XCBuildConfiguration] = project.configs.map { config in
             let buildSettings = project.getProjectBuildSettings(config: config)
             var baseConfiguration: PBXFileReference?
@@ -166,9 +160,14 @@ public class PBXProjGenerator {
         }
 
         for (name, package) in project.packages {
-            let packageReference = XCRemoteSwiftPackageReference(repositoryURL: package.url, versionRequirement: package.versionRequirement)
-            packageReferences[name] = packageReference
-            addObject(packageReference)
+            switch package {
+            case let .remote(url, versionRequirement):
+                let packageReference = XCRemoteSwiftPackageReference(repositoryURL: url, versionRequirement: versionRequirement)
+                packageReferences[name] = packageReference
+                addObject(packageReference)
+            case let .local(path):
+                try sourceGenerator.createLocalPackage(path: Path(path))
+            }
         }
 
         let productGroup = addObject(
@@ -598,6 +597,7 @@ public class PBXProjGenerator {
         var packageDependencies: [XCSwiftPackageProductDependency] = []
         var extensions: [PBXBuildFile] = []
         var carthageFrameworksToEmbed: [String] = []
+        var localPackageReferences: [String] = project.packages.compactMap { $0.value.isLocal ? $0.key : nil }
 
         let targetDependencies = (target.transitivelyLinkDependencies ?? project.options.transitivelyLinkDependencies) ?
             getAllDependenciesPlusTransitiveNeedingEmbedding(target: target) : target.dependencies
@@ -799,8 +799,12 @@ public class PBXProjGenerator {
                 }
             // Embedding handled by iterating over `carthageDependencies` below
             case .package(let product):
-                guard let packageReference = packageReferences[dependency.reference] else {
-                    return
+                let packageReference = packageReferences[dependency.reference]
+                
+                // If package's reference is none and there is no specified package in localPackages,
+                // then ignore the package specified as dependency.
+                if packageReference == nil, !localPackageReferences.contains(dependency.reference) {
+                    continue
                 }
 
                 let productName = product ?? dependency.reference
@@ -940,9 +944,11 @@ public class PBXProjGenerator {
         }
 
         let swiftObjCInterfaceHeader = project.getCombinedBuildSetting("SWIFT_OBJC_INTERFACE_HEADER_NAME", target: target, config: project.configs[0]) as? String
+        let swiftInstallObjCHeader = project.getCombinedBuildSetting("SWIFT_INSTALL_OBJC_HEADER", target: target, config: project.configs[0]) as? Bool
 
         if target.type == .staticLibrary
             && swiftObjCInterfaceHeader != ""
+            && swiftInstallObjCHeader != false
             && sourceFiles.contains(where: { $0.buildPhase == .sources && $0.path.extension == "swift" }) {
 
             let inputPaths = ["$(DERIVED_SOURCES_DIR)/$(SWIFT_OBJC_INTERFACE_HEADER_NAME)"]

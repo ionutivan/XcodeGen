@@ -53,9 +53,9 @@ extension Project {
             }
         }
 
-        for package in localPackages {
-            if !(basePath + Path(package).normalize()).exists {
-                errors.append(.invalidLocalPackage(package))
+        for (name, package) in packages {
+            if case let .local(path) = package, !(basePath + Path(path).normalize()).exists {
+                errors.append(.invalidLocalPackage(name))
             }
         }
 
